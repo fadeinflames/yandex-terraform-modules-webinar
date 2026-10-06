@@ -1,0 +1,27 @@
+# Скопируйте в terraform.tfvars (файл в .gitignore). Токена здесь НЕТ: export YC_TOKEN=...
+yc_cloud_id  = "<ID_ОБЛАКА>"
+yc_folder_id = "<ID_КАТАЛОГА_PROD>"
+yc_zone      = "ru-central1-a"
+
+name_prefix       = "workshop-prod"
+subnet_cidr       = "10.0.2.0/24"
+ssh_allowed_cidrs = ["203.0.113.10/32"] # свой адрес: curl -s https://ifconfig.me, затем /32
+
+ssh_public_key_path = "~/.ssh/id_ed25519.pub"
+owner               = "lecturer"
+
+# Тот же модуль, что и в dev, но два сервера побольше и с SSD-диском данных.
+servers = {
+  web-1 = {
+    cores          = 2
+    memory         = 8
+    data_disk_gb   = 20
+    data_disk_type = "network-ssd"
+  }
+  web-2 = {
+    cores          = 2
+    memory         = 8
+    data_disk_gb   = 20
+    data_disk_type = "network-ssd"
+  }
+}

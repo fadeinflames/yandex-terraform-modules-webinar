@@ -1,0 +1,13 @@
+#cloud-config
+package_update: true
+packages:
+  - nginx
+write_files:
+  - path: /var/www/html/index.html
+    permissions: "0644"
+    content: |
+      <h1>${server_name}</h1>
+      <p>environment: ${environment}</p>
+runcmd:
+  - systemctl enable nginx
+  - systemctl restart nginx

@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terraform: модули, окружения, best practices</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap&subset=cyrillic" rel="stylesheet">
+<style>
+/* ===========================================================
+   ТЕМА (Terminal Green). Меняется в одном месте: переменные :root
+   =========================================================== */
+:root {
+  --bg: #0d1117;
+  --bg-2: #161b22;
+  --bg-3: #1c232d;
+  --line: #30363d;
+  --text: #c9d1d9;
+  --dim: #8b949e;
+  --green: #3fb950;
+  --green-hi: #7ee787;
+  --red: #ff7b72;
+  --amber: #e3b341;
+  --blue: #79c0ff;
+  --font: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* типографика: масштаб от меньшей стороны окна, чтобы слайд всегда помещался */
+  --title-size: clamp(1.6rem, min(5.4vw, 9vh), 4.6rem);
+  --h2-size: clamp(1.2rem, min(3.2vw, 5.6vh), 2.6rem);
+  --h3-size: clamp(0.95rem, min(1.9vw, 3.4vh), 1.6rem);
+  --body-size: clamp(0.78rem, min(1.55vw, 2.75vh), 1.4rem);
+  --code-size: clamp(0.7rem, min(1.35vw, 2.4vh), 1.2rem);
+  --small-size: clamp(0.65rem, min(1vw, 1.8vh), 0.9rem);
+
+  --slide-padding: clamp(1rem, 3.2vw, 3.5rem);
+  --content-gap: clamp(0.5rem, 2vh, 1.6rem);
+  --element-gap: clamp(0.25rem, 1vh, 0.9rem);
+}
+
+/* ===========================================
+   VIEWPORT FITTING: ОБЯЗАТЕЛЬНАЯ БАЗА
+   =========================================== */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow-x: hidden; }
+html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+
+.slide {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.slide-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--content-gap);
+  max-height: 100%;
+  overflow: hidden;
+  padding: var(--slide-padding);
+  padding-bottom: calc(var(--slide-padding) * 1.2);
+}
+
+body {
+  font-family: var(--font);
+  font-size: var(--body-size);
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+
+
+/* ---------- типографика ---------- */
+h1 { font-size: var(--title-size); line-height: 1.08; letter-spacing: -.02em; font-weight: 800; color: #fff; }
+h2 { font-size: var(--h2-size); line-height: 1.15; letter-spacing: -.01em; font-weight: 800; color: #fff; }
+h3 { font-size: var(--h3-size); line-height: 1.2; font-weight: 700; color: var(--green-hi); }
+p, li { font-size: var(--body-size); }
+.dim { color: var(--dim); }
+.g { color: var(--green-hi); }
+.r { color: var(--red); }
+.a { color: var(--amber); }
+.b { color: var(--blue); }
+strong { color: #fff; font-weight: 700; }
+code {
+  font-family: var(--font); font-size: .92em; color: var(--green-hi);
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 4px; padding: .02em .35em;
+}
+ul.list { list-style: none; display: flex; flex-direction: column; gap: clamp(.35rem, 1.1vh, .9rem); }
+ul.list li { padding-left: 1.5em; position: relative; }
+ul.list li::before { content: "▸"; position: absolute; left: 0; color: var(--green); }
+ul.list.bad li::before { content: "✗"; color: var(--red); }
+ul.list.good li::before { content: "✓"; color: var(--green); }
+
+/* ---------- блоки кода ---------- */
+pre {
+  font-family: var(--font); font-size: var(--code-size); line-height: 1.5;
+  background: #010409; border: 1px solid var(--line); border-radius: 8px;
+  padding: clamp(.55rem, 1.6vh, 1.1rem) clamp(.7rem, 1.4vw, 1.3rem);
+  overflow: hidden; white-space: pre; color: var(--text);
+}
+pre .c { color: #6e7681; }
+pre .k { color: var(--blue); }
+pre .s { color: var(--green-hi); }
+pre .p { color: var(--green); user-select: none; }
+pre .bad { color: var(--red); }
+pre .good { color: var(--green-hi); }
+.card {
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px;
+  padding: clamp(.6rem, 1.8vh, 1.2rem) clamp(.7rem, 1.5vw, 1.3rem);
+  min-width: 0; overflow: hidden;
+}
+.card.bad  { border-color: rgba(255,123,114,.45); }
+.card.good { border-color: rgba(63,185,80,.55); }
+.card h3 { margin-bottom: var(--element-gap); }
+.tag { /* метки БЫЛО / СТАЛО */
+  display: inline-block; font-size: var(--small-size); font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; border-radius: 4px; padding: .1em .6em; margin-bottom: var(--element-gap);
+}
+.tag.bad  { color: var(--red);   border: 1px solid rgba(255,123,114,.5); background: rgba(255,123,114,.08); }
+.tag.good { color: var(--green-hi); border: 1px solid rgba(63,185,80,.55); background: rgba(63,185,80,.08); }
+
+/* ---------- сетки ---------- */
+.cols  { display: grid; grid-template-columns: 1fr 1fr; gap: var(--content-gap); align-items: start; min-width: 0; }
+.cols.wide-l { grid-template-columns: 1.15fr 1fr; }
+.cols.wide-r { grid-template-columns: 1fr 1.15fr; }
+.grid  { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: clamp(.5rem, 1.5vw, 1rem); }
+.grid.two { grid-template-columns: 1fr 1fr; }
+
+/* таблица в виде сетки (без <table>, чтобы управлять переносами) */
+.rows { display: grid; gap: clamp(.25rem, .8vh, .6rem); }
+.row { display: grid; gap: clamp(.5rem, 1.2vw, 1rem); padding: clamp(.35rem, 1vh, .7rem) clamp(.6rem, 1.2vw, 1rem);
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; align-items: center; min-width: 0; }
+.row.head { background: transparent; border-color: transparent; color: var(--dim); font-size: var(--small-size);
+  text-transform: uppercase; letter-spacing: .08em; padding-top: 0; padding-bottom: 0; }
+.row.r3 { grid-template-columns: 1fr 1fr; }
+.row.r4 { grid-template-columns: .9fr 1.15fr 1.15fr .8fr; }
+.row .pain { color: var(--red); }
+.row .cure { color: var(--green-hi); }
+.row.rec { border-color: rgba(63,185,80,.7); box-shadow: 0 0 0 1px rgba(63,185,80,.25) inset; }
+
+/* ---------- ДЕМО и ДЗ ---------- */
+.banner {
+  display: inline-flex; align-items: center; gap: .7em; align-self: flex-start;
+  font-size: var(--h2-size); font-weight: 800; letter-spacing: .06em;
+  color: #04120a; background: var(--green); padding: .1em .6em; border-radius: 6px;
+}
+.slide.hw .banner { background: var(--amber); color: #1a1300; font-size: var(--h3-size); }
+.slide.hw h3 { color: var(--amber); }
+.slide.demo { background: linear-gradient(180deg, rgba(63,185,80,.05), transparent 40%), var(--bg); }
+
+ol.steps { list-style: none; counter-reset: s; display: flex; flex-direction: column; gap: clamp(.35rem, 1.2vh, .9rem); }
+ol.steps li { counter-increment: s; position: relative; padding-left: 2.4em; }
+ol.steps li::before {
+  content: counter(s); position: absolute; left: 0; top: .05em; width: 1.7em; height: 1.7em; display: grid; place-items: center;
+  font-size: .85em; font-weight: 800; color: #04120a; background: var(--green); border-radius: 50%;
+}
+
+/* ---------- схема (граф модулей) ---------- */
+.diagram { display: grid; gap: .5rem; font-size: var(--small-size); }
+.diagram .lvl { display: grid; gap: .5rem; grid-template-columns: 1fr 1fr; }
+.node {
+  border: 1px solid var(--line); background: var(--bg-2); border-radius: 8px;
+  padding: .45em .7em; text-align: center; min-width: 0;
+}
+.node.env  { border-color: rgba(121,192,255,.55); color: var(--blue); }
+.node.mod  { border-color: rgba(63,185,80,.6); color: var(--green-hi); }
+.node.st   { border-color: rgba(227,179,65,.5); color: var(--amber); }
+.arrow { text-align: center; color: var(--dim); line-height: 1; }
+
+/* ---------- конвейер ---------- */
+.pipe { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.pipe .node { padding: .35em .8em; }
+.pipe .sep { color: var(--green); }
+
+/* ---------- лестница ---------- */
+.ladder { display: flex; flex-direction: column; gap: .4rem; }
+.ladder .step { padding: .4em .8em; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-2); }
+.ladder .step:nth-child(1) { border-color: rgba(255,123,114,.5); margin-right: 18%; }
+.ladder .step:nth-child(2) { border-color: rgba(227,179,65,.5);  margin-right: 12%; }
+.ladder .step:nth-child(3) { border-color: rgba(63,185,80,.55);  margin-right: 6%; }
+.ladder .step:nth-child(4) { border-color: var(--green); background: rgba(63,185,80,.1); }
+
+/* вводная фраза под заголовком: объясняет, о чём слайд */
+.lead { font-size: var(--body-size); color: #aeb7c2; max-width: 78ch; }
+.lead code { font-size: .9em; }
+.card p { margin-top: var(--element-gap); }
+.card pre { margin-top: var(--element-gap); }
+
+/* ---------- спойлеры ---------- */
+details {
+  background: var(--bg-2); border: 1px dashed var(--line); border-radius: 8px;
+  padding: .45em .8em; font-size: var(--body-size);
+}
+details summary { cursor: pointer; color: var(--amber); list-style: none; font-weight: 700; }
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: "?"; display: inline-block; width: 1.5em; margin-right: .5em; text-align: center; color: #1a1300; background: var(--amber); border-radius: 4px; font-weight: 800; }
+details[open] { border-style: solid; border-color: rgba(227,179,65,.5); }
+details .ans { margin-top: .4em; color: var(--text); }
+
+/* ---------- заметки лектора (клавиша N) ---------- */
+aside.notes { display: none; }
+#notes {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: none;
+  max-height: 34vh; overflow: auto; padding: .8rem var(--slide-padding);
+  background: rgba(1,4,9,.96); border-top: 2px solid var(--green); font-size: var(--small-size); color: var(--text);
+}
+#notes b { color: var(--green-hi); }
+body.show-notes #notes { display: block; }
+
+/* ---------- навигация ---------- */
+#progress { position: fixed; top: 0; left: 0; height: 3px; width: 0; background: var(--green); z-index: 60; transition: width .25s; }
+.counter {
+  position: fixed; bottom: clamp(.4rem, 1.2vh, .9rem); z-index: 40; font-size: var(--small-size); color: var(--dim);
+  background: rgba(13,17,23,.8); border: 1px solid var(--line); border-radius: 4px; padding: .1em .6em;
+}
+.counter { right: clamp(.6rem, 1.4vw, 1.4rem); }
+
+/* ---------- появление элементов ---------- */
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
+.slide.visible .reveal { opacity: 1; transform: none; }
+.slide.visible .reveal:nth-child(2) { transition-delay: .08s; }
+.slide.visible .reveal:nth-child(3) { transition-delay: .16s; }
+.slide.visible .reveal:nth-child(4) { transition-delay: .24s; }
+.slide.visible .reveal:nth-child(5) { transition-delay: .32s; }
+
+/* ---------- титульный слайд ---------- */
+.slide.title .slide-content { justify-content: center; gap: calc(var(--content-gap) * 1.4); }
+.slide.title h1 span { color: var(--green); }
+.roadmap { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; font-size: var(--body-size); }
+.roadmap .node { padding: .3em .8em; }
+
+/* ---------- адаптив ---------- */
+@media (max-height: 700px) {
+  :root { --slide-padding: clamp(.75rem, 3vw, 2rem); --content-gap: clamp(.4rem, 1.5vh, 1rem); }
+}
+@media (max-width: 760px) {
+  /* телефон: презентация рассчитана на экран проектора; здесь разрешаем прокрутку внутри слайда */
+  html { scroll-snap-type: none; }
+  .slide { height: auto; min-height: 100dvh; overflow: visible; }
+  .slide-content { overflow: visible; }
+  .cols, .cols.wide-l, .cols.wide-r, .grid.two, .row.r3, .row.r4 { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .2s !important; }
+  html { scroll-behavior: auto; }
+  .reveal { transform: none; }
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<main id="deck">
+
+<!-- ===================== 1. ТИТУЛ ===================== -->
+<section class="slide title" data-time="0:00–0:01" data-min="1">
+  <div class="slide-content">
+    <p class="dim reveal">Terraform + Yandex Cloud</p>
+    <h1 class="reveal">Terraform:<br><span>модули, окружения,</span><br>best practices</h1>
+    <p class="lead reveal">Берём один работающий стенд (сеть, ВМ с nginx и диск) и доводим его от файла «на коленке» до проекта, с которым можно работать в команде и в продакшене.</p>
+    <div class="roadmap reveal">
+      <span class="node st">один файл main.tf</span><span class="g">→</span>
+      <span class="node mod">модули</span><span class="g">→</span>
+      <span class="node env">окружения dev и prod</span><span class="g">→</span>
+      <span class="node st">state в облаке</span><span class="g">→</span>
+      <span class="node mod">защита от ошибок</span>
+    </div>
+  </div>
+  <aside class="notes"><b>0:00–0:01.</b> Один стенд (сеть + SG + ВМ с nginx + диск) и его путь «как в проде». Практики сегодня нет: будет ДЗ. План на час: модули → переменные → окружения и state → best practices → ДЗ.</aside>
+</section>
+
+<!-- ===================== 2. ПРОБЛЕМЫ ===================== -->
+<section class="slide" data-time="0:01–0:03" data-min="3">
+  <div class="slide-content">
+    <h2 class="reveal">Что не так с проектом из одного файла</h2>
+    <p class="lead reveal">Стартовый проект <code>00-start</code> работает: поднимает сеть, ВМ с nginx и диск. Но для команды и продакшена в нём есть слабые места.</p>
+    <div class="rows reveal">
+      <div class="row r3 head"><span>Плохо</span><span>Лучше</span></div>
+      <div class="row r3"><span class="pain">весь код в одном main.tf, значения вписаны прямо в него</span><span class="cure">код в модулях, значения в параметрах</span></div>
+      <div class="row r3"><span class="pain">три одинаковых правила файрвола (ingress)</span><span class="cure">одно правило-шаблон и список портов</span></div>
+      <div class="row r3"><span class="pain">версии Terraform и провайдера не зафиксированы</span><span class="cure">версии зафиксированы, lock-файл в git</span></div>
+      <div class="row r3"><span class="pain">токен доступа лежит в terraform.tfvars</span><span class="cure">токен берётся из переменной окружения</span></div>
+      <div class="row r3"><span class="pain">SSH открыт всему интернету, путь к ключу в коде</span><span class="cure">SSH только с вашего адреса, путь к ключу снаружи</span></div>
+      <div class="row r3"><span class="pain">один общий state на всё</span><span class="cure">свой state у каждого окружения, хранится в облаке</span></div>
+    </div>
+    <details class="reveal"><summary>Сколько строк менять ради второго окружения?</summary><div class="ans">Много, и одну легко забыть. Копия папки = дрейф.</div></details>
+  </div>
+  <aside class="notes"><b>0:01–0:03.</b> Коротко для новичков (30–40 секунд): цикл <code>init → plan → apply → destroy</code>, символы в plan <code>+ - ~ -/+</code>. «Вот стенд, он работает. Завтра просят такой же, но prod. Скопируете папку, а через месяц правка попадёт в одну копию. Это ошибка структуры, а не человека. Мы убираем тойл.» Открыть <code>00-start/main.tf</code>, пролистать метки «БОЛЬ №».</aside>
+</section>
+
+<!-- ===================== 3. ЗАЧЕМ МОДУЛИ ===================== -->
+<section class="slide" data-time="0:03–0:05" data-min="2">
+  <div class="slide-content">
+    <h2 class="reveal">Зачем выносить код в модули</h2>
+    <p class="lead reveal">Модуль — это папка с кодом Terraform, которую можно вызывать много раз с разными параметрами, как функцию в программировании.</p>
+    <div class="cols reveal">
+      <ul class="list">
+        <li><strong>Вход → код → выход:</strong> variable → resource → output</li>
+        <li><strong>Одна правка в одном месте</strong>, а не в трёх копиях (принцип DRY)</li>
+        <li><strong>Каждый отвечает за своё:</strong> модуль network за сеть, модуль vm за сервер</li>
+        <li><strong>Меньше тойла</strong> (рутины, где легко ошибиться): копии не расходятся</li>
+      </ul>
+      <div class="diagram">
+        <div class="lvl"><div class="node" style="border-color:rgba(255,123,114,.5);color:var(--red)">копия для dev</div><div class="node" style="border-color:rgba(255,123,114,.5);color:var(--red)">копия для prod</div></div>
+        <div class="arrow">≠ со временем расходятся</div>
+        <div class="node mod">module "vm" { … }</div>
+        <div class="arrow">▲ ▲ ▲ один код, разные параметры</div>
+        <div class="lvl" style="grid-template-columns:1fr 1fr 1fr"><div class="node env">dev</div><div class="node env">stage</div><div class="node env">prod</div></div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><b>0:03–0:05.</b> «Правило: если вы поменяете значение для prod, это переменная. Если нет, константа внутри.» История-заготовка (замените своей): два окружения разошлись, потому что правку применили только в одном.</aside>
+</section>
+
+<!-- ===================== 4. СТРУКТУРА ===================== -->
+<section class="slide" data-time="0:05–0:06" data-min="1">
+  <div class="slide-content">
+    <h2 class="reveal">Структура проекта: модули и окружения</h2>
+    <p class="lead reveal">Окружение (dev, prod) — отдельная папка со своими значениями и своим state. Общий код лежит в <code>modules/</code> и подключается из каждого окружения.</p>
+    <div class="cols wide-l reveal">
+      <div><h3>Папки проекта</h3>
+<pre>00-start/        <span class="c">стартовый проект из одного файла</span>
+modules/         <span class="c">общий код</span>
+  network/       <span class="c">сеть, подсеть, firewall</span>
+  vm/            <span class="c">ВМ, диск, настройка nginx</span>
+environments/    <span class="c">окружения</span>
+  dev/           <span class="c">свои значения и state</span>
+  prod/          <span class="c">те же модули, другие значения</span></pre></div>
+      <div><h3>Как они связаны</h3>
+      <div class="diagram">
+        <div class="lvl"><div class="node env">environments/dev</div><div class="node env">environments/prod</div></div>
+        <div class="arrow">▼ подключают одни и те же модули ▼</div>
+        <div class="lvl"><div class="node mod">module.network</div><div class="node mod">module.vm</div></div>
+        <div class="arrow">network передаёт vm: subnet_id, security_group_id</div>
+        <div class="lvl"><div class="node st">state dev</div><div class="node st">state prod</div></div>
+      </div></div>
+    </div>
+    <p class="dim reveal">Подключение к облаку (provider) настраивается только в окружении, внутри модуля его нет.</p>
+  </div>
+  <aside class="notes"><b>0:05–0:06.</b> Схема справа и есть граф модулей. Почему «директория на окружение + общие модули» разберём в блоке 4.</aside>
+</section>
+
+<!-- ===================== 5. ИНТЕРФЕЙС ===================== -->
+<section class="slide" data-time="0:06–0:07" data-min="1">
+  <div class="slide-content">
+    <h2 class="reveal">Каким должен быть модуль снаружи</h2>
+    <p class="lead reveal">«Снаружи» модуль — это его переменные (входы) и outputs (выходы). Плохой интерфейс сводит пользу модуля на нет.</p>
+    <div class="cols reveal">
+      <div class="card bad"><span class="tag bad">как не надо</span>
+        <ul class="list bad">
+          <li>переменная на каждый аргумент ресурса: это не модуль, а копия ресурса</li>
+          <li>provider внутри модуля: его нельзя переиспользовать</li>
+          <li>путь <code>~/.ssh/…</code> внутри: сломается на чужой машине</li>
+          <li><code>count</code> по списку: при удалении элемента индексы «едут»</li>
+        </ul>
+      </div>
+      <div class="card good"><span class="tag good">как надо</span>
+        <ul class="list good">
+          <li>наружу только то, что меняется между окружениями</li>
+          <li>одна переменная-объект вместо десяти отдельных</li>
+          <li>outputs, чтобы передавать значения в другие модули</li>
+          <li>SSH-ключ передаём <strong>содержимым</strong>, а не путём к файлу</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><b>0:06–0:07.</b> «Модуль, у которого переменная на каждый аргумент, ничего не упрощает: вы переписали ресурс в другом месте.»</aside>
+</section>
+
+<!-- ===================== 6. MOVED ===================== -->
+<section class="slide" data-time="0:07–0:08" data-min="1">
+  <div class="slide-content">
+    <h2 class="reveal">moved: переносим код в модуль и ничего не пересоздаём</h2>
+    <p class="lead reveal">Terraform помнит ресурсы по адресам. Когда ресурс переезжает в модуль, адрес меняется, и Terraform решит: старый удалить, новый создать. Блок <code>moved</code> говорит: это тот же ресурс, просто с новым адресом.</p>
+    <div class="cols reveal">
+      <div class="card bad"><span class="tag bad">было</span>
+        <p class="dim">файл <code>00-start/main.tf</code></p>
+<pre>resource "yandex_vpc_network" "<span class="bad">workshop</span>" {
+  name = "workshop-network"
+}</pre>
+        <p>адрес: <code>yandex_vpc_network.workshop</code></p></div>
+      <div class="card good"><span class="tag good">стало</span>
+        <p class="dim">файл <code>modules/network/main.tf</code></p>
+<pre>resource "yandex_vpc_network" "<span class="good">this</span>" {
+  name = "${var.name_prefix}-network"
+}</pre>
+        <p>адрес: <code>module.network.yandex_vpc_network.this</code></p></div>
+    </div>
+    <div class="cols reveal">
+<pre><span class="c"># environments/dev/moved.tf: «было → стало»</span>
+<span class="k">moved</span> {
+  from = yandex_vpc_network.workshop
+  to   = module.network.yandex_vpc_network.this
+}</pre>
+      <div class="rows">
+        <div class="row" style="grid-template-columns:1fr"><span class="g">✓ в plan: has moved to · 0 to add · 0 to destroy</span></div>
+        <div class="row" style="grid-template-columns:1fr;border-color:rgba(255,123,114,.55)"><span class="r">✗ в plan: -/+ forces replacement: ресурс пересоздастся, стоп</span></div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><b>0:07–0:08.</b> Без moved Terraform решит: старый удалить, новый создать. Блоков moved пять (сеть, подсеть, security group, диск, ВМ); <code>data</code>-источники не переносятся, они читаются заново. Что может пойти не так: параметры модуля не совпали с прежними, и в plan появляется <code>-/+</code>.</aside>
+</section>
+
+<!-- ===================== 7. ДЕМО 1 ===================== -->
+<section class="slide demo" data-time="0:08–0:18" data-min="10">
+  <div class="slide-content">
+    <span class="banner">ДЕМО 1 · из одного файла в модули</span>
+    <p class="lead reveal">Переносим работающий стенд в модули так, чтобы ни один ресурс в облаке не пересоздался.</p>
+    <ol class="steps reveal">
+      <li><code>terraform state list</code> в <code>00-start</code>: что сейчас под управлением Terraform</li>
+      <li>смотрим новые модули и файл <code>moved.tf</code> в <code>environments/dev</code></li>
+      <li><code>terraform init</code>: Terraform подключает модули</li>
+      <li><code>terraform plan</code>: 5 переездов (<span class="g">has moved to</span>), 0 to add, 0 to destroy</li>
+      <li>нарочно меняем <code>subnet_cidr</code>: видим <span class="r">-/+ forces replacement</span>, возвращаем</li>
+      <li><code>terraform apply</code>: ресурсы теперь живут в <code>module.*</code></li>
+    </ol>
+    <details class="reveal"><summary>Что будет, если убрать moved до apply?</summary><div class="ans">Старое удалится, новое создастся: <code>-/+</code>. Поэтому читаем plan до apply.</div></details>
+  </div>
+  <aside class="notes"><b>0:08–0:18.</b> Предусловие: state от 00-start скопирован в environments/dev. Единственное <code>~</code> в plan: metadata (heredoc → шаблон cloud-init), это изменение на месте. Итог apply: 0 added, 1 changed, 0 destroyed. Бонус: <code>ignore_changes</code> по image_id защитил ВМ от пересоздания при новой версии образа.</aside>
+</section>
+
+<!-- ===================== 8. ПЕРЕМЕННЫЕ ===================== -->
+<section class="slide" data-time="0:20–0:23" data-min="3">
+  <div class="slide-content">
+    <h2 class="reveal">Переменные: защищаем модуль от неправильных значений</h2>
+    <p class="lead reveal">Переменные — параметры модуля. Типы и проверки (<code>validation</code>) отсекают ошибки до того, как что-то создастся в облаке.</p>
+    <div class="cols wide-l reveal">
+<pre><span class="c"># список серверов с параметрами</span>
+<span class="k">variable</span> <span class="s">"servers"</span> {
+  type = map(object({
+    cores        = optional(number, 2)
+    memory       = optional(number, 2)
+    data_disk_gb = optional(number)
+  }))
+  validation {
+    condition = alltrue([for s in var.servers :
+      s.memory &gt;= 2 &amp;&amp; s.memory &lt;= 16])
+    error_message = "memory: от 2 до 16 ГБ"
+  }
+}</pre>
+      <ul class="list">
+        <li><code>optional(тип, значение)</code>: пишем только то, что отличается от умолчаний</li>
+        <li><code>validation</code>: ошибка видна на plan, до создания ресурсов</li>
+        <li><code>nullable = false</code>: пустое значение заменяется умолчанием</li>
+        <li><code>sensitive</code>: скрывает значение в выводе, но в state оно остаётся</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes"><b>0:20–0:23.</b> «validation — это тест на входные данные.» В окружении у servers стоит <code>type = any</code>, строгий тип и проверки живут в модуле. В HCL оператор <code>||</code> не ленивый: вместо <code>x == null || x &gt;= 1</code> используем <code>coalesce</code>.</aside>
+</section>
+
+<!-- ===================== 9. DYNAMIC / FOR_EACH / TEMPLATEFILE ===================== -->
+<section class="slide" data-time="0:23–0:25" data-min="2">
+  <div class="slide-content">
+    <h2 class="reveal">Меньше копипасты: dynamic, for_each, templatefile</h2>
+    <p class="lead reveal">Четыре приёма, которые убирают повторяющийся код. Красные строки с «−» показывают, как было, зелёные с «+», как стало.</p>
+    <div class="grid two reveal">
+      <div class="card"><h3>три одинаковых правила → dynamic</h3>
+<pre><span class="bad">- ingress { port = 22 }  × 3</span>
+<span class="good">+ dynamic "ingress" {
++   for_each = var.ingress_rules
++ }</span></pre></div>
+      <div class="card"><h3>несколько серверов → for_each</h3>
+<pre><span class="bad">- count    = length(var.names)</span>
+<span class="good">+ for_each = var.servers</span>
+<span class="c">  # ключи вместо индексов</span></pre></div>
+      <div class="card"><h3>скрипт настройки ВМ → templatefile</h3>
+<pre><span class="bad">- user-data = &lt;&lt;-EOT …</span>
+<span class="good">+ user-data = templatefile("…tftpl", {
++   server_name = …
++ })</span></pre></div>
+      <div class="card"><h3>устаревший индекс → [0]</h3>
+<pre><span class="bad">- network_interface.0.nat_ip_address</span>
+<span class="good">+ network_interface[0].nat_ip_address</span></pre></div>
+    </div>
+  </div>
+  <aside class="notes"><b>0:23–0:25.</b> Удалили элемент из середины списка при <code>count</code>: соседи сдвигаются и пересоздаются. <code>count</code> уместен для «включить/выключить» (<code>count = var.enabled ? 1 : 0</code>).</aside>
+</section>
+
+<!-- ===================== 10. ДЕМО 2 ===================== -->
+<section class="slide demo" data-time="0:25–0:29" data-min="4">
+  <div class="slide-content">
+    <span class="banner">ДЕМО 2 · модуль vm в деле</span>
+    <p class="lead reveal">Проверяем, как модуль реагирует на неправильные параметры и как добавить второй сервер одной строкой.</p>
+    <ol class="steps reveal">
+      <li>ставим <code>memory = 64</code> и запускаем plan: <span class="r">Invalid value for variable</span> с <strong>нашим</strong> сообщением</li>
+      <li>добавляем сервер <code>api</code> в <code>servers</code>: <span class="g">1 to add</span>, уже работающий <code>web</code> не затронут</li>
+      <li><code>terraform console</code>: смотрим, как <code>templatefile</code> собирает cloud-init (скрипт, который ставит nginx при первом запуске ВМ)</li>
+    </ol>
+    <p class="dim reveal">С count и списком удаление элемента сдвинуло бы индексы. С for_each у каждого сервера свой ключ.</p>
+  </div>
+  <aside class="notes"><b>0:25–0:29.</b> Вопрос залу: почему в окружении у servers <code>type = any</code>, а в модуле строгий тип? (Тип и проверки живут в одном месте.) Если не хватает времени: показать код, не запуская plan.</aside>
+</section>
+
+<!-- ===================== 11. ОКРУЖЕНИЯ ===================== -->
+<section class="slide" data-time="0:29–0:32" data-min="3">
+  <div class="slide-content">
+    <h2 class="reveal">Как разделить dev и prod</h2>
+    <p class="lead reveal">Окружение — отдельная копия инфраструктуры под свою цель: dev для экспериментов, prod для пользователей. Есть четыре способа их разделить.</p>
+    <div class="rows reveal">
+      <div class="row r4 head"><span>Подход</span><span>Плюсы</span><span>Минусы</span><span>Когда</span></div>
+      <div class="row r4"><span><strong>Workspaces</strong> (несколько state в одной папке)</span><span class="g">один код, быстро</span><span class="r">общие права, легко перепутать</span><span>временные стенды</span></div>
+      <div class="row r4 rec"><span><strong>Папка на окружение + общие модули</strong></span><span class="g">раздельные state и права, понятный diff</span><span class="r">повторяются вызовы модулей</span><span class="g">✔ по умолчанию</span></div>
+      <div class="row r4"><span><strong>Свой каталог в облаке на окружение</strong></span><span class="g">отдельные права и биллинг</span><span class="r">квота на сети всё равно общая</span><span>вместе с папками</span></div>
+      <div class="row r4"><span><strong>Terragrunt</strong> (надстройка над Terraform)</span><span class="g">меньше повторов</span><span class="r">ещё один инструмент</span><span>знать, что есть</span></div>
+    </div>
+    <p class="dim reveal">Квота «Networks» = 2 на облако, и сеть default тоже считается. <span class="a">ПРОВЕРИТЬ в консоли «Квоты».</span></p>
+  </div>
+  <aside class="notes"><b>0:29–0:32.</b> «Для prod я хочу, чтобы destroy в dev физически не мог дотянуться до prod.» Terragrunt: один слайд, не углубляемся.</aside>
+</section>
+
+<!-- ===================== 12. REMOTE STATE ===================== -->
+<section class="slide" data-time="0:32–0:35" data-min="3">
+  <div class="slide-content">
+    <h2 class="reveal">State в Object Storage вместо ноутбука</h2>
+    <p class="lead reveal">State — файл, в котором Terraform запоминает созданные ресурсы. Если он только на ноутбуке, его легко потерять, перезаписать или не поделиться с командой. Поэтому его кладут в бакет.</p>
+    <div class="cols wide-l reveal">
+<pre><span class="k">backend</span> <span class="s">"s3"</span> {
+  endpoints = { s3 = <span class="s">"https://storage.yandexcloud.net"</span> }
+  region    = <span class="s">"ru-central1"</span>
+  skip_region_validation      = true
+  skip_credentials_validation = true
+  skip_requesting_account_id  = true
+  skip_s3_checksum            = true
+  use_lockfile = true  <span class="c"># ПРОВЕРИТЬ на бакете</span>
+}
+<span class="c"># бакет и путь: init -backend-config=backend-s3.hcl</span></pre>
+      <ul class="list">
+        <li>каждому окружению свой <code>key</code> (путь к файлу), в бакете включены версии</li>
+        <li>блокировка не даёт двоим менять окружение одновременно: <code>use_lockfile</code> <span class="a">ПРОВЕРИТЬ</span>, запасной вариант YDB</li>
+        <li><strong>общие ключи доступа не раздаём:</strong> они открывают все state, а в state бывают секреты</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes"><b>0:32–0:35.</b> В документации Yandex Cloud блокировка описана через YDB (<code>dynamodb_table</code>), с Terraform 1.11 это объявлено устаревшим. Object Storage поддерживает условную запись If-None-Match; работу lock-файла проверить заранее двумя терминалами.</aside>
+</section>
+
+<!-- ===================== 13. ДЕМО 3 ===================== -->
+<section class="slide demo" data-time="0:35–0:41" data-min="6">
+  <div class="slide-content">
+    <span class="banner">ДЕМО 3 · dev и prod из одних модулей</span>
+    <p class="lead reveal">Одни и те же модули, два окружения с разными значениями и state в облаке.</p>
+    <ol class="steps reveal">
+      <li>сравниваем <code>terraform.tfvars</code> dev и prod: 1 сервер против 2, SSH только с <code>/32</code></li>
+      <li>prod: <code>terraform plan</code>, создаётся с нуля: <span class="g">8 to add</span></li>
+      <li>dev: <code>init -migrate-state</code> переносит state в бакет</li>
+      <li>в консоли облака видим файл <code>workshop/dev/terraform.tfstate</code></li>
+      <li>два терминала: <code>apply</code> и <code>plan</code> одновременно: <span class="r">Error acquiring the state lock</span></li>
+      <li>prod: <code>plan -destroy</code> упирается в <span class="r">prevent_destroy</span>: сторож от случайного destroy</li>
+    </ol>
+  </div>
+  <aside class="notes"><b>0:35–0:41.</b> Вопрос залу: кто может перезаписать state, если раздать всем один ключ? (Любой.) Блокировку при сомнениях заменить скриншотом. Сторож: lifecycle принимает только литералы, поэтому в модуль prevent_destroy параметром не передать; защита от <code>destroy</code>, но не от правки кода.</aside>
+</section>
+
+<!-- ===================== 14. СЕКРЕТЫ ===================== -->
+<section class="slide" data-time="0:41–0:44" data-min="3">
+  <div class="slide-content">
+    <h2 class="reveal">Секреты, state и SSH</h2>
+    <p class="lead reveal">Три места, где чаще всего случаются утечки и инциденты. Начнём с токена доступа к облаку.</p>
+    <div class="cols reveal">
+      <div class="ladder">
+        <div class="step"><span class="r">✗</span> токен в <code>terraform.tfvars</code> рядом с кодом</div>
+        <div class="step"><span class="a">~</span> <code>TF_VAR_yc_token</code>: лучше, но всё ещё переменная Terraform</div>
+        <div class="step"><span class="g">✓</span> <code>YC_TOKEN=$(yc iam create-token)</code>: из окружения</div>
+        <div class="step"><span class="g">✓✓</span> сервисный аккаунт с минимумом прав</div>
+      </div>
+      <ul class="list">
+        <li>state хранит секреты открытым текстом: бакет приватный, версии включены</li>
+        <li><code>sensitive</code> прячет значение в выводе, но не в state</li>
+        <li>SSH: только свой адрес (<code>/32</code>) или bastion-хост; в prod запрещаем <code>0.0.0.0/0</code> (весь интернет)</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes"><b>0:41–0:44.</b> История-заготовка (замените своей): токен из tfvars попал в скриншот в чате; выпуск за секунды, отзыв и разбор за дни.</aside>
+</section>
+
+<!-- ===================== 15. ВОСПРОИЗВОДИМОСТЬ ===================== -->
+<section class="slide" data-time="0:44–0:47" data-min="3">
+  <div class="slide-content">
+    <h2 class="reveal">Воспроизводимость: у всех одинаковый результат</h2>
+    <p class="lead reveal">Если версии Terraform и провайдера не зафиксированы, у вас, коллеги и в CI один и тот же код может дать разные изменения.</p>
+    <div class="cols reveal">
+      <div class="card bad"><span class="tag bad">плохо</span>
+<pre><span class="c"># .gitignore</span>
+<span class="bad">.terraform.lock.hcl</span>
+
+<span class="c"># версий нигде нет</span>
+<span class="bad">required_providers {
+  yandex = { source = "…" }
+}</span></pre></div>
+      <div class="card good"><span class="tag good">хорошо</span>
+<pre>required_version = <span class="s">"&gt;= 1.10.0, &lt; 2.0.0"</span>
+version = <span class="s">"~&gt; 0.235"</span>
+<span class="c"># lock-файл в git</span>
+source = <span class="s">"git::https://…//modules/vm</span>
+<span class="s">         ?ref=v1.2.0"</span> <span class="c"># по тегу</span></pre></div>
+    </div>
+    <p class="dim reveal">Lock-файл хранит точные версии провайдера, его нужно коммитить. Модули из git подключаем по тегу, а не по ветке.</p>
+  </div>
+  <aside class="notes"><b>0:44–0:47.</b> Lock не закоммичен: в CI другая версия провайдера, на ровном месте diff по десяти ресурсам в пятницу вечером. Модули пинить по тегу, не по ветке. <code>terraform providers lock</code> для всех ОС.</aside>
+</section>
+
+<!-- ===================== 16. КАЧЕСТВО И ПРОЦЕСС ===================== -->
+<section class="slide" data-time="0:47–0:52" data-min="5">
+  <div class="slide-content">
+    <h2 class="reveal">Качество и процесс: как не сломать прод</h2>
+    <p class="lead reveal">Проверки запускаем автоматически, а любое изменение инфраструктуры проходит через ревью.</p>
+    <div class="pipe reveal">
+      <span class="node">коммит</span><span class="sep">→</span><span class="node mod">pre-commit: проверки</span><span class="sep">→</span><span class="node">pull request</span><span class="sep">→</span><span class="node env">plan в комментарии</span><span class="sep">→</span><span class="node">ревью</span><span class="sep">→</span><span class="node st">apply</span>
+    </div>
+    <div class="cols reveal">
+      <div class="card"><h3>Проверки</h3>
+        <ul class="list"><li><code>fmt</code>, <code>validate</code>: формат и корректность</li><li><code>tflint</code>, <code>checkov</code>: ошибки и дыры в безопасности</li><li><code>gitleaks</code>: секреты в коде; <code>terraform-docs</code>: документация</li></ul></div>
+      <div class="card"><h3>Защита от ошибок</h3>
+        <ul class="list"><li><code>prevent_destroy</code>: запрет удаления ресурса</li><li><code>ignore_changes</code>: не пересоздавать из-за мелочей</li><li><code>moved</code>, <code>import</code>: рефакторинг и подключение готовых ресурсов</li></ul></div>
+    </div>
+  </div>
+  <aside class="notes"><b>0:47–0:52.</b> Читаем plan глазами: <code>-/+</code> и <code>- destroy</code> красные флаги. tflint про конфигурацию, checkov про политики безопасности. В prod стоит сторож <code>destroy_guard</code>. История-заготовка: apply с ноутбука без ревью, destroy не там.</aside>
+</section>
+
+<!-- ===================== 17. ДЗ ===================== -->
+<section class="slide hw" data-time="0:52–0:55" data-min="3">
+  <div class="slide-content">
+    <span class="banner">Домашнее задание: модули и окружения · 1,5–2 ч</span>
+    <div class="grid two reveal">
+      <div class="card"><h3>Что делаем</h3>
+        <ul class="list"><li>берём <code>00-start</code>, делаем модули <code>network</code> и <code>vm</code></li><li>окружения dev и prod, у каждого свой state</li><li><code>dynamic</code>, 1+ <code>validation</code>, токен вне репозитория, lock-файл и версии</li><li>★ for_each, templatefile, moved, свой бакет, pre-commit</li></ul></div>
+      <div class="card"><h3>Как сдаём</h3>
+        <ul class="list"><li>ссылка на репозиторий или <code>git archive</code></li><li>README и вывод plan: <code>plan-dev.txt</code>, <code>plan-prod.txt</code></li><li><span class="r">нельзя:</span> tfvars, tfstate, токены, ключи</li><li><code>terraform destroy</code> обязателен</li></ul></div>
+      <div class="card"><h3>По каким критериям (100)</h3>
+        <p>структура 20 · интерфейс модулей 20 · DRY 15 · валидация 15 · секреты 15 · воспроизводимость 10 · документация 5. Зачёт от 70.</p></div>
+      <div class="card"><h3>Осторожно</h3>
+        <ul class="list"><li>2 сети на облако, проверьте квоту заранее</li><li>никаких Managed-сервисов</li><li>срок и контакт: <span class="a">&lt;ДАТА&gt;</span>, <span class="a">&lt;КОНТАКТ&gt;</span></li></ul></div>
+    </div>
+  </div>
+  <aside class="notes"><b>0:52–0:55.</b> apply на реальном облаке желателен, но не обязателен; destroy обязателен. Перед отправкой: <code>git ls-files | grep -E 'tfvars$|tfstate'</code> и gitleaks. Подробности: students/homework/README.md, hints.md.</aside>
+</section>
+
+<!-- ===================== 18. ЧТО ДАЛЬШЕ ===================== -->
+<section class="slide" data-time="0:55–1:00" data-min="5">
+  <div class="slide-content">
+    <h2 class="reveal">Что дальше</h2>
+    <p class="lead reveal">После домашнего задания есть куда расти. Сегодня только названия: каждый пункт тянет на отдельный разговор.</p>
+    <div class="grid two reveal">
+      <div class="card"><h3>CI/CD для Terraform</h3><p>plan и apply запускаются автоматически из pull request, без запусков с ноутбука</p></div>
+      <div class="card"><h3>Policy as Code</h3><p>правила безопасности записаны кодом и проверяются автоматически (checkov, OPA)</p></div>
+      <div class="card"><h3>Terragrunt</h3><p>надстройка над Terraform, убирает повторы между окружениями</p></div>
+      <div class="card"><h3>CDKTF и Pulumi</h3><p>та же инфраструктура, но на обычных языках программирования вместо HCL</p></div>
+    </div>
+    <div class="card cleanup reveal"><h3>После вебинара: убрать за собой</h3>
+<pre><span class="p">$ </span>cd environments/dev  &amp;&amp; terraform destroy
+<span class="p">$ </span>cd ../prod            &amp;&amp; terraform state rm terraform_data.destroy_guard &amp;&amp; terraform destroy</pre>
+      <p class="dim">Потом проверьте консоль: ВМ, диски, сети. Пока ресурс существует, он стоит денег.</p></div>
+  </div>
+  <aside class="notes"><b>0:55–1:00.</b> ДЗ 3 мин уже разобрано; вопросы 3 мин; напоминание про destroy 1 мин. Если тишина: «Какой шаг ДЗ кажется самым рискованным?» (moved и квоты.)</aside>
+</section>
+
+</main>
+
+<div class="counter" id="counter">1 / 18</div>
+<div id="notes" role="region" aria-label="Заметки лектора"></div>
+
+<script>
+/* Контроллер презентации: клавиатура, прогресс, заметки (клавиша N). Колесо и касания работают через scroll-snap. */
+class Deck {
+  constructor() {
+    this.slides = [...document.querySelectorAll('.slide')];
+    this.counter = document.getElementById('counter');
+    this.progress = document.getElementById('progress');
+    this.notes = document.getElementById('notes');
+    this.idx = 0;
+    this.observe();
+    this.bind();
+    this.slides[0].classList.add('visible');
+    this.update();
+    const h = parseInt(location.hash.slice(1), 10);
+    if (h >= 1 && h <= this.slides.length) this.go(h - 1, true);
+  }
+  observe() {
+    // появление элементов и определение текущего слайда
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting && e.intersectionRatio > 0.55) {
+          e.target.classList.add('visible');
+          this.idx = this.slides.indexOf(e.target);
+          this.update();
+        }
+      });
+    }, { threshold: [0.55] });
+    this.slides.forEach(s => io.observe(s));
+  }
+  update() {
+    const n = this.slides.length;
+    this.counter.textContent = (this.idx + 1) + ' / ' + n;
+    this.progress.style.width = ((this.idx + 1) / n * 100) + '%';
+    const note = this.slides[this.idx].querySelector('aside.notes');
+    this.notes.innerHTML = note ? note.innerHTML : '';
+    history.replaceState(null, '', '#' + (this.idx + 1));
+  }
+  go(i, instant) {
+    i = Math.max(0, Math.min(this.slides.length - 1, i));
+    // состояние обновляем сразу, не дожидаясь IntersectionObserver (он нужен для прокрутки колесом и касаниями)
+    this.idx = i;
+    this.slides[i].classList.add('visible');
+    this.update();
+    this.slides[i].scrollIntoView({ behavior: instant ? 'auto' : 'smooth' });
+  }
+  bind() {
+    document.addEventListener('keydown', e => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const onSummary = document.activeElement && document.activeElement.tagName === 'SUMMARY';
+      switch (e.key) {
+        case 'ArrowRight': case 'ArrowDown': case 'PageDown': this.go(this.idx + 1); e.preventDefault(); break;
+        case ' ': case 'Enter': if (!onSummary) { this.go(this.idx + 1); e.preventDefault(); } break;
+        case 'ArrowLeft': case 'ArrowUp': case 'PageUp': this.go(this.idx - 1); e.preventDefault(); break;
+        case 'Home': this.go(0); e.preventDefault(); break;
+        case 'End': this.go(this.slides.length - 1); e.preventDefault(); break;
+        case 'n': case 'N': document.body.classList.toggle('show-notes'); break;
+        case 'f': case 'F':
+          if (document.fullscreenElement) document.exitFullscreen();
+          else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+          break;
+      }
+    });
+  }
+}
+window.deck = new Deck();
+// переход по ссылке вида index.html#7 без перезагрузки страницы
+window.addEventListener('hashchange', () => {
+  const h = parseInt(location.hash.slice(1), 10);
+  if (h >= 1 && h <= window.deck.slides.length && h - 1 !== window.deck.idx) window.deck.go(h - 1);
+});
+</script>
+</body>
+</html>

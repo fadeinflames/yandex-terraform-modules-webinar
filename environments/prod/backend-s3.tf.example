@@ -1,0 +1,17 @@
+# Remote state для prod: тот же backend, другой key (см. backend-s3.hcl.example).
+# Подробные комментарии и порядок миграции: environments/dev/backend-s3.tf.example
+terraform {
+  backend "s3" {
+    endpoints = {
+      s3 = "https://storage.yandexcloud.net"
+    }
+    region = "ru-central1"
+
+    skip_region_validation      = true
+    skip_credentials_validation = true
+    skip_requesting_account_id  = true
+    skip_s3_checksum            = true
+
+    use_lockfile = true # ПРОВЕРИТЬ ПО ДОКУМЕНТАЦИИ и на своём бакете, см. dev/backend-s3.tf.example
+  }
+}

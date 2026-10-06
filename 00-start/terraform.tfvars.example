@@ -1,0 +1,6 @@
+# Скопируйте в terraform.tfvars (файл в .gitignore). Это исходный вариант.
+# БОЛЬ №4: токен лежит рядом с кодом. Сегодня мы это уберём.
+yc_token     = "<OAUTH_ИЛИ_IAM_ТОКЕН>"
+yc_cloud_id  = "<ID_ОБЛАКА>"
+yc_folder_id = "<ID_КАТАЛОГА>"
+yc_zone      = "ru-central1-a"

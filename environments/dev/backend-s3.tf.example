@@ -1,0 +1,30 @@
+# Remote state в Yandex Object Storage (S3-совместимый backend).
+# Использование (из директории окружения):
+#   mv backend.tf backend.local.bak && cp backend-s3.tf.example backend.tf
+#   cp backend-s3.hcl.example backend-s3.hcl   # и подставить имя бакета
+#   export AWS_ACCESS_KEY_ID=...  AWS_SECRET_ACCESS_KEY=...   # статический ключ сервисного аккаунта
+#   terraform init -backend-config=backend-s3.hcl -migrate-state
+#
+# Backend-блок не принимает переменные: bucket и key передаются через -backend-config.
+terraform {
+  backend "s3" {
+    endpoints = {
+      s3 = "https://storage.yandexcloud.net"
+    }
+    region = "ru-central1"
+
+    # Нужны для S3-совместимых хранилищ не от AWS.
+    # ПРОВЕРИТЬ ПО ДОКУМЕНТАЦИИ: https://yandex.cloud/ru/docs/tutorials/infrastructure-management/terraform-state-storage
+    skip_region_validation      = true
+    skip_credentials_validation = true
+    skip_requesting_account_id  = true
+    skip_s3_checksum            = true
+
+    # Блокировка нативным lock-файлом в бакете (Terraform >= 1.10).
+    # ПРОВЕРИТЬ ПО ДОКУМЕНТАЦИИ и НА СВОЁМ БАКЕТЕ ЗАРАНЕЕ: в доках Yandex Cloud описана блокировка
+    # через YDB, а use_lockfile там не упомянут. Object Storage поддерживает условную запись If-None-Match
+    # (https://yandex.cloud/ru/docs/storage/operations/objects/upload), но работу lock-файла проверьте
+    # двумя параллельными plan. Если не работает, см. запасной вариант в README: YDB + dynamodb_table.
+    use_lockfile = true
+  }
+}

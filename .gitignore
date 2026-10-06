@@ -1,0 +1,31 @@
+# Terraform: локальные артефакты
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfplan
+tfplan
+
+# Секреты и локальные значения: в git только *.example
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+backend-s3.hcl
+!backend-s3.hcl.example
+.env
+*.pem
+*.key
+sa-key*.json
+
+# Lock-файл .terraform.lock.hcl НЕ игнорируем: его коммитят, чтобы версии провайдера не «плавали».
+# Часто его добавляют в .gitignore по привычке: здесь так делать не нужно (см. README, раздел «Lock-файл»).
+
+# Материалы лектора живут в приватной ветке/репозитории, не в main
+/instructor/
+
+# Редакторы и ОС
+.DS_Store
+.idea/
+.vscode/
+.claude*

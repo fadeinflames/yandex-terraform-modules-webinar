@@ -1,0 +1,27 @@
+# БЫЛО: vm_external_ip, vm_internal_ip, vm_id, ssh_command, web_url (одна ВМ, строки).
+# СТАЛО: те же пять смыслов, но map по ключам servers (ВМ может быть несколько); синтаксис [0] внутри модуля.
+
+output "vm_external_ips" {
+  description = "Публичные IP серверов по ключам."
+  value       = { for key, s in module.vm.servers : key => s.external_ip }
+}
+
+output "vm_internal_ips" {
+  description = "Внутренние IP серверов по ключам."
+  value       = { for key, s in module.vm.servers : key => s.internal_ip }
+}
+
+output "vm_ids" {
+  description = "ID серверов по ключам."
+  value       = { for key, s in module.vm.servers : key => s.id }
+}
+
+output "ssh_commands" {
+  description = "Команды SSH по ключам."
+  value       = { for key, s in module.vm.servers : key => "ssh ubuntu@${s.external_ip}" }
+}
+
+output "web_urls" {
+  description = "Адреса nginx по ключам."
+  value       = { for key, s in module.vm.servers : key => "http://${s.external_ip}" }
+}

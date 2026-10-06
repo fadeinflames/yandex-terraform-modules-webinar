@@ -1,0 +1,33 @@
+# Установка: pip install pre-commit && pre-commit install
+# Требуются в PATH: terraform, tflint, terraform-docs, checkov (для terraform_checkov).
+repos:
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.109.2 # ПРОВЕРИТЬ: актуальный тег на github.com/antonbabenko/pre-commit-terraform/releases
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+        args:
+          - --hook-config=--retry-once-with-cleanup=true
+      - id: terraform_tflint
+        args:
+          - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
+      - id: terraform_docs
+        args:
+          - --args=--sort-by required
+      - id: terraform_checkov
+        args:
+          - --args=--quiet
+          - --args=--skip-check CKV_TF_1 # модули из локального пути, не из git по хэшу
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1 # ПРОВЕРИТЬ: актуальный тег на github.com/gitleaks/gitleaks/releases
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: forbid-state-and-tfvars
+        name: Запрет коммита state и tfvars
+        language: pygrep
+        entry: '.'
+        files: '(\.tfstate(\.backup)?$|(^|/)[^/]*\.tfvars$)'
