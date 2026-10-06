@@ -1,0 +1,4 @@
+yc_cloud_id       = "<ID_ОБЛАКА>"
+yc_folder_id      = "<ID_КАТАЛОГА>"
+ssh_allowed_cidrs = ["203.0.113.10/32"]
+owner             = "student-ivanov"
