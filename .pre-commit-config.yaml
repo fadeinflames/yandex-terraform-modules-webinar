@@ -1,4 +1,5 @@
 # Установка: pip install pre-commit && pre-commit install
+# 00-start/ исключён из validate/tflint/checkov намеренно: это стартовый проект с «болями».
 # Требуются в PATH: terraform, tflint, terraform-docs, checkov (для terraform_checkov).
 repos:
   - repo: https://github.com/antonbabenko/pre-commit-terraform
@@ -6,15 +7,18 @@ repos:
     hooks:
       - id: terraform_fmt
       - id: terraform_validate
+        exclude: ^00-start/
         args:
           - --hook-config=--retry-once-with-cleanup=true
       - id: terraform_tflint
+        exclude: ^00-start/
         args:
           - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
       - id: terraform_docs
         args:
           - --args=--sort-by required
       - id: terraform_checkov
+        exclude: ^00-start/
         args:
           - --args=--quiet
           - --args=--skip-check CKV_TF_1 # модули из локального пути, не из git по хэшу
