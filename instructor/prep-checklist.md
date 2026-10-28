@@ -12,8 +12,8 @@
       в документации указано, что с 12.10.2026 девять квот переходят с регионального на зонное распределение: проверьте актуальные значения для `ru-central1-a`)
       и число публичных IP (dev 1 + prod 2).
 - [ ] **Версии.** Terraform >= 1.10 (на момент подготовки актуален 1.16.x, ПРОВЕРИТЬ на releases.hashicorp.com),
-      провайдер `yandex-cloud/yandex` (актуальная 0.235.x, ПРОВЕРИТЬ на registry.terraform.io/providers/yandex-cloud/yandex,
-      провайдер выходит очень часто: обновите `~> 0.235` в `versions.tf` и закоммитьте свежий lock-файл).
+      провайдер `yandex-cloud/yandex` (актуальная 0.241.x, ПРОВЕРИТЬ на registry.terraform.io/providers/yandex-cloud/yandex,
+      провайдер выходит очень часто: обновите `~> 0.241` в `versions.tf` и закоммитьте свежий lock-файл).
 - [ ] **Зеркало провайдера.** Если registry.terraform.io недоступен: `.terraformrc` с `network_mirror` Yandex
       (https://yandex.cloud/ru/docs/terraform/quickstart).
 - [ ] **lock-файл.** После `terraform init` в каждом окружении: `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=windows_amd64`

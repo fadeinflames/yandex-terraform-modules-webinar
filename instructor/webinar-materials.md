@@ -10,9 +10,9 @@
 - Блокировка в документации Yandex Cloud описана **только через YDB** (`dynamodb_table`, Document API), и объявлена устаревшей начиная с Terraform 1.11. Про `use_lockfile` документация Yandex Cloud молчит. Object Storage поддерживает условную запись `If-None-Match` при загрузке, на этом механизме строится lock-файл. Вывод: `use_lockfile = true` **вероятно работает, но не подтверждено документацией: проверьте на своём бакете до вебинара** (процедура в `instructor/prep-checklist.md`), запасной вариант YDB описан.
 - Квоты (документация VPC): сети — 2 **на облако** (не на каталог), подсети — 12, security groups — 10, публичные адреса — 8 (статические — 2). Автосозданная сеть `default` входит в квоту. Квоты Compute: 12 ВМ, 32 vCPU, 128 ГБ RAM; в документации указан переход ряда квот на зонное распределение с 12.10.2026.
 - В `yandex_compute_instance` **нет** аргумента `deletion_protection` (проверено по документации провайдера и Yandex Cloud), а `lifecycle.prevent_destroy` принимает только литералы. Поэтому «`prevent_destroy = true` в prod только через параметры» невозможно буквально: в материалах это решено сторожем `terraform_data.destroy_guard` на уровне окружения (раздел 4, блок 4) и объясняется студентам как полезный разбор «чего Terraform не умеет».
-- Актуальные версии на момент подготовки: Terraform 1.16.x, провайдер yandex 0.235.0, pre-commit-terraform v1.109.2, gitleaks v8.30.1.
+- Актуальные версии на момент подготовки: Terraform 1.16.x, провайдер yandex 0.241.0, pre-commit-terraform v1.109.2, gitleaks v8.30.1.
 
-**Не проверено выполнением:** на этой машине нет Terraform, поэтому код **не прогонялся** через `fmt`/`validate`/`plan`. Выверка идёт по документации и вручную. **Перед вебинаром выполните**: `terraform fmt -check -recursive`, `terraform init -backend=false && terraform validate` в обоих окружениях и в `00-start`, и прогон демо на реальном каталоге. Ожидаемые выводы `plan`/`apply` ниже помечены «примерный вывод».
+**Проверено выполнением (2026-10-28):** Terraform 1.16.5, провайдер `yandex-cloud/yandex` 0.241.0. `terraform fmt -check -recursive` чист; `terraform init -backend=false` и `terraform validate` проходят в `environments/dev`, `environments/prod`, эталонном решении (dev, prod) и `instructor/bootstrap-state-bucket`; `tflint` 0.65 без замечаний в `modules/` и `environments/`; `gitleaks` 8.30 не нашёл секретов ни в истории `main`, ни в рабочем дереве `instructor`. Lock-файлы для `environments/dev` и `prod` сгенерированы с хэшами для windows_amd64, linux_amd64, darwin_amd64, darwin_arm64 и закоммичены. В `00-start` `validate` падает на `file("~/.ssh/id_rsa.pub")`, а `tflint` даёт шесть предупреждений: это задуманные «боли» (№3, №6, №7), они описаны в `00-start/README.md`, а каталог исключён из хуков pre-commit. **Не проверено:** `terraform plan`/`apply` на реальном облаке (нужен ваш токен и каталог) и запуск `pre-commit` целиком. Ожидаемые выводы `plan`/`apply` ниже помечены «примерный вывод».
 
 **Допущения (скорректируйте, если не так):**
 1. Аудитория новая: Terraform многие видят впервые, поэтому основы (цикл `init → plan → apply → destroy`, `provider`/`resource`/`variable`/`output`/`state`) повторяем кратко и по ходу демо. Облако у каждого пустое; квота сетей 2 на облако; если `00-start` разворачивали, к ДЗ его нужно уничтожить.
@@ -60,7 +60,7 @@
 |---|---|---|---|
 | 1 | Всё в одном `main.tf`; имена, CIDR, зона, размеры, путь к ключу захардкожены; для второго окружения копируем файлы | Модули `network` и `vm`; параметры в `terraform.tfvars`; dev/prod из одного кода (РО1, РО2) | `modules/`, `environments/` |
 | 2 | Три почти одинаковых блока `ingress` (22, 80, 443) | `dynamic "ingress"` по `map` правил | `modules/network/main.tf` |
-| 3 | `.terraform.lock.hcl` в `.gitignore`, нет `required_version` и версии провайдера | Lock-файл коммитим; `required_version >= 1.10`, `version = "~> 0.235"` | `.gitignore`, `environments/*/versions.tf` |
+| 3 | `.terraform.lock.hcl` в `.gitignore`, нет `required_version` и версии провайдера | Lock-файл коммитим; `required_version >= 1.10`, `version = "~> 0.241"` | `.gitignore`, `environments/*/versions.tf` |
 | 4 | OAuth-токен открытым текстом в `terraform.tfvars`, переменная не `sensitive` | `YC_TOKEN` из окружения (или сервисный аккаунт); переменной нет; `sensitive` разбираем | `environments/*/main.tf` |
 | 5 | SSH (22) открыт на `0.0.0.0/0` | `ssh_allowed_cidrs`; в prod валидация запрещает `0.0.0.0/0` | `environments/prod/variables.tf` |
 | 6 | `file("~/.ssh/id_rsa.pub")` зависит от машины запускающего (у других ключ называется иначе) | Путь — параметр окружения (`ssh_public_key_path`), в модуль уходит содержимое ключа | `environments/*/main.tf`, `modules/vm` |
@@ -352,9 +352,10 @@ flowchart LR
 
 Файл формируется из `presentation/index.html` и всегда ему соответствует. Заметки лектора лежат в самой презентации (клавиша `N`).
 
-### Слайд 1. Terraform: модули, окружения, best practices (0:00–0:01)
+### Слайд 1. Terraform: модули, окружения, (0:00–0:01)
 
 - Terraform + Yandex Cloud
+- best practices
 - Берём один работающий стенд (сеть, ВМ с nginx и диск) и доводим его от файла «на коленке» до проекта, с которым можно работать в команде и в продакшене.
 - один файл main.tf
 - модули
@@ -581,7 +582,7 @@ flowchart LR
 - required_providers { yandex = { source = "…" } }
 - хорошо
 - required_version = ">= 1.10.0, < 2.0.0"
-- version = "~> 0.235"
+- version = "~> 0.241"
 - # lock-файл в git
 - source = "git::https://…//modules/vm
 - ?ref=v1.2.0"
@@ -682,6 +683,8 @@ yandex-terraform-modules-webinar/
 │   ├── index.html                  презентация: один самодостаточный файл, 18 слайдов
 │   └── slides.md                   структура слайдов (источник)
 ├── students/
+│   ├── README.md                   вводная: что где лежит, подготовка окружения
+│   ├── cheatsheet.md               шпаргалка по командам и синтаксису
 │   ├── troubleshooting.md          типичные ошибки и диагностика
 │   └── homework/
 │       ├── README.md               «Домашнее задание: модули и окружения»
@@ -702,7 +705,7 @@ yandex-terraform-modules-webinar/
 | Область | `00-start` | Результат |
 |---|---|---|
 | Структура | один `main.tf`, общий state | модули + окружения, state на окружение |
-| Версии | не зафиксированы, lock в `.gitignore` | `required_version`, `~> 0.235`, lock коммитим |
+| Версии | не зафиксированы, lock в `.gitignore` | `required_version`, `~> 0.241`, lock коммитим |
 | Секреты | токен в `terraform.tfvars` | `YC_TOKEN`, переменной нет |
 | Security group | 3 `ingress`-блока, SSH на `0.0.0.0/0` | `dynamic` + `ssh_allowed_cidrs`, в prod запрет `0.0.0.0/0` |
 | ВМ | одна, всё захардкожено | `servers` (`for_each`), `optional`, `validation` |
@@ -753,6 +756,7 @@ sa-key*.json
 **`.pre-commit-config.yaml`**
 ```yaml
 # Установка: pip install pre-commit && pre-commit install
+# 00-start/ исключён из validate/tflint/checkov намеренно: это стартовый проект с «болями».
 # Требуются в PATH: terraform, tflint, terraform-docs, checkov (для terraform_checkov).
 repos:
   - repo: https://github.com/antonbabenko/pre-commit-terraform
@@ -760,15 +764,18 @@ repos:
     hooks:
       - id: terraform_fmt
       - id: terraform_validate
+        exclude: ^00-start/
         args:
           - --hook-config=--retry-once-with-cleanup=true
       - id: terraform_tflint
+        exclude: ^00-start/
         args:
           - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
       - id: terraform_docs
         args:
           - --args=--sort-by required
       - id: terraform_checkov
+        exclude: ^00-start/
         args:
           - --args=--quiet
           - --args=--skip-check CKV_TF_1 # модули из локального пути, не из git по хэшу
@@ -813,7 +820,7 @@ terraform {
   required_providers {
     yandex = {
       source  = "yandex-cloud/yandex"
-      version = ">= 0.235.0, < 1.0.0" # ПРОВЕРИТЬ: актуальная версия на registry.terraform.io/providers/yandex-cloud/yandex
+      version = ">= 0.241.0, < 1.0.0" # проверено 2026-10-28; точную версию фиксирует .terraform.lock.hcl
     }
   }
 }
@@ -956,7 +963,7 @@ terraform {
   required_providers {
     yandex = {
       source  = "yandex-cloud/yandex"
-      version = ">= 0.235.0, < 1.0.0" # ПРОВЕРИТЬ: актуальная версия на registry.terraform.io/providers/yandex-cloud/yandex
+      version = ">= 0.241.0, < 1.0.0" # проверено 2026-10-28; точную версию фиксирует .terraform.lock.hcl
     }
   }
 }
@@ -1211,7 +1218,7 @@ terraform {
   required_providers {
     yandex = {
       source  = "yandex-cloud/yandex"
-      version = "~> 0.235" # >= 0.235, < 1.0. ПРОВЕРИТЬ: актуальная версия на registry.terraform.io/providers/yandex-cloud/yandex
+      version = "~> 0.241" # >= 0.241, < 1.0. ПРОВЕРИТЬ: актуальная версия на registry.terraform.io/providers/yandex-cloud/yandex
     }
   }
 }
@@ -2086,7 +2093,8 @@ metadata = {
 ## С чего начать
 
 1. Скопируйте `00-start/` в свой репозиторий и подставьте значения в `terraform.tfvars` (по образцу `terraform.tfvars.example`).
-2. `terraform init && terraform validate`. Желательно один раз сделать `terraform apply`, чтобы увидеть работающий стенд (обязательно потом `terraform destroy`).
+2. `terraform init && terraform validate`. Если `validate` ругается на `file("~/.ssh/id_rsa.pub")`, поправьте путь на свой ключ: это одна из «болей» стартового проекта, которую вы будете чинить.
+   Желательно один раз сделать `terraform apply`, чтобы увидеть работающий стенд (обязательно потом `terraform destroy`).
 3. Дальше рефакторинг: модули, окружения, остальное по списку ниже.
 
 ## Структура вашего проекта
@@ -2336,7 +2344,7 @@ terraform {
   required_providers {
     yandex = {
       source  = "yandex-cloud/yandex"
-      version = "~> 0.235" # посмотрите актуальную версию в реестре Terraform
+      version = "~> 0.241" # посмотрите актуальную версию в реестре Terraform
     }
   }
 }
@@ -2430,6 +2438,309 @@ Backend-блок не принимает переменные: `bucket` и `key`
 - `terraform init` не может скачать провайдера — зеркало Yandex, см. `.terraformrc` в документации
   https://yandex.cloud/ru/docs/terraform/quickstart.
 </details>
+````
+
+### 9.3. `students/README.md` (вводная для студентов)
+
+````markdown
+# Материалы для студентов
+
+Это ваша папка: всё, что нужно до вебинара, во время него и для домашнего задания.
+
+| Файл | Зачем |
+|---|---|
+| [`cheatsheet.md`](cheatsheet.md) | Шпаргалка: команды, синтаксис модулей и переменных, backend, проверки |
+| [`homework/README.md`](homework/README.md) | Домашнее задание: что сделать, что сдавать, по каким критериям проверяют |
+| [`homework/hints.md`](homework/hints.md) | Подсказки к ДЗ в спойлерах, без готового решения |
+| [`troubleshooting.md`](troubleshooting.md) | Типичные ошибки и что с ними делать |
+| [`../00-start/`](../00-start/) | Стартовый проект из одного файла: с него начинается ДЗ |
+| [`../modules/`](../modules/), [`../environments/`](../environments/) | Разобранный на вебинаре пример: модули и окружения |
+| [`../presentation/index.html`](../presentation/index.html) | Слайды: открываются в браузере, листаются стрелками |
+
+## Перед вебинаром: подготовьте окружение (15–20 минут)
+
+Вебинар идёт без практики, но домашнее задание делается в реальном облаке. Лучше подготовить всё заранее.
+
+1. **Terraform 1.10 или новее.** Проверка: `terraform version`.
+   Установка: https://developer.hashicorp.com/terraform/install. Зеркало для России: https://hashicorp-releases.yandexcloud.net/terraform/
+2. **`yc` CLI** и вход в аккаунт: https://yandex.cloud/ru/docs/cli/quickstart. Проверка: `yc config list` показывает `cloud-id` и `folder-id`.
+3. **Облако и каталог** с правами на создание сетей и ВМ. Если облако новое, посмотрите квоты в консоли («Квоты»): на сети по умолчанию 2 на облако, и одну уже занимает сеть `default`.
+4. **SSH-ключ.** Если нет: `ssh-keygen -t ed25519`. Публичная часть лежит в `~/.ssh/id_ed25519.pub`.
+5. **Зеркало провайдера.** Если `terraform init` не может скачать провайдера с registry.terraform.io, настройте зеркало Yandex Cloud: раздел «Зеркало провайдера» в `cheatsheet.md`.
+6. **Токен.** Не записывайте его в файлы. Перед работой выполняйте:
+   ```bash
+   export YC_TOKEN=$(yc iam create-token)
+   ```
+   PowerShell: `$env:YC_TOKEN = (yc iam create-token)`. Токен живёт ограниченное время; при ошибке «Unauthenticated» выполните команду снова.
+
+Проверка, что всё готово (в облаке ничего не создаёт):
+
+```bash
+cd environments/dev
+cp terraform.tfvars.example terraform.tfvars   # подставьте cloud_id, folder_id, свой IP
+terraform init
+terraform validate
+```
+
+## После вебинара
+
+1. Прочитайте [`homework/README.md`](homework/README.md) и сделайте задание: 1,5–2 часа.
+2. Застряли: сначала [`troubleshooting.md`](troubleshooting.md), потом [`homework/hints.md`](homework/hints.md).
+3. Перед отправкой прогоните проверки из раздела «Перед отправкой» в задании.
+4. После проверки в облаке обязательно `terraform destroy` в каждом окружении: ВМ, диски и публичные адреса стоят денег, пока существуют.
+
+## Про деньги и безопасность, коротко
+
+- Стенд из одной ВМ стоит недорого, но за ночь набегает. Не оставляйте его «на потом».
+- Никаких Managed-сервисов (БД, кластеры): для задания они не нужны и стоят дорого.
+- SSH (порт 22) открывайте только со своего адреса: `curl -s https://ifconfig.me`, затем добавьте `/32`.
+- Токены, ключи, `terraform.tfvars` и `*.tfstate` никогда не попадают в git. Проверка перед отправкой есть в задании.
+````
+
+### 9.4. `students/cheatsheet.md`
+
+````markdown
+# Шпаргалка: Terraform, модули, окружения, Yandex Cloud
+
+## Рабочий цикл
+
+```bash
+terraform init             # скачать провайдера и модули, настроить backend
+terraform validate         # проверить синтаксис и типы, в облако не ходит
+terraform plan             # показать, что изменится; ничего не создаёт
+terraform apply            # применить (спросит подтверждение)
+terraform destroy          # удалить всё, что в state
+terraform fmt -recursive   # отформатировать код
+terraform state list       # что сейчас под управлением Terraform
+terraform output           # значения outputs
+terraform console          # интерактивно вычислять выражения
+```
+
+Символы в `plan`:
+
+| Символ | Что значит |
+|---|---|
+| `+` | создать |
+| `-` | удалить |
+| `~` | изменить на месте |
+| `-/+` | **удалить и создать заново** (`# forces replacement`): остановитесь и поймите, почему |
+| `<=` | прочитать data-источник |
+
+## Аутентификация без токена в файлах
+
+```bash
+export YC_TOKEN=$(yc iam create-token)
+export YC_CLOUD_ID=$(yc config get cloud-id)     # можно вместо var.yc_cloud_id
+export YC_FOLDER_ID=$(yc config get folder-id)
+```
+
+Провайдер читает `YC_TOKEN`, `YC_CLOUD_ID`, `YC_FOLDER_ID`, `YC_ZONE` из окружения. Блок `provider "yandex"` тогда может содержать только `zone`.
+
+## Зеркало провайдера (если registry.terraform.io недоступен)
+
+Файл `~/.terraformrc` (Linux, macOS) или `%APPDATA%\terraform.rc` (Windows):
+
+```hcl
+provider_installation {
+  network_mirror {
+    url     = "https://terraform-mirror.yandexcloud.net/"
+    include = ["registry.terraform.io/*/*"]
+  }
+  direct {
+    exclude = ["registry.terraform.io/*/*"]
+  }
+}
+```
+
+Документация: https://yandex.cloud/ru/docs/terraform/quickstart
+
+## Версии и lock-файл
+
+```hcl
+terraform {
+  required_version = ">= 1.10.0, < 2.0.0"
+  required_providers {
+    yandex = {
+      source  = "yandex-cloud/yandex"
+      version = "~> 0.241"     # то же, что >= 0.241, < 1.0
+    }
+  }
+}
+```
+
+`.terraform.lock.hcl` появляется после `init` и фиксирует точную версию и хэши. **Его коммитят.**
+Хэши для других ОС: `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=windows_amd64`.
+Обновить провайдера в рамках ограничения: `terraform init -upgrade`.
+
+## Модуль
+
+```
+modules/vm/
+  main.tf        ресурсы
+  variables.tf   входы
+  outputs.tf     выходы
+  versions.tf    required_providers (без блока provider!)
+```
+
+Вызов из окружения и связь модулей через outputs:
+
+```hcl
+module "network" {
+  source      = "../../modules/network"
+  name_prefix = var.name_prefix
+}
+
+module "vm" {
+  source    = "../../modules/vm"
+  subnet_id = module.network.subnet_id     # output одного модуля → вход другого
+}
+```
+
+Адрес ресурса внутри модуля: `module.vm.yandex_compute_instance.this["web"]`.
+
+## Переменные
+
+```hcl
+variable "servers" {
+  description = "Серверы: ключ → параметры"
+  type = map(object({
+    cores        = optional(number, 2)    # поле необязательное, умолчание 2
+    memory       = optional(number, 2)
+    data_disk_gb = optional(number)       # умолчание null
+  }))
+
+  validation {
+    condition     = alltrue([for s in values(var.servers) : s.memory >= 2 && s.memory <= 16])
+    error_message = "memory: от 2 до 16 ГБ."
+  }
+}
+
+variable "labels" {
+  type     = map(string)
+  default  = {}
+  nullable = false      # null заменится на default
+}
+
+variable "db_password" {
+  type      = string
+  sensitive = true      # скрывает в выводе, но НЕ в state
+}
+```
+
+Полезные проверки: `can(regex("^[a-z][-a-z0-9]*$", var.name))`, `can(cidrhost(var.cidr, 0))`, `contains(["a", "b"], var.x)`, `!contains(var.cidrs, "0.0.0.0/0")`.
+В `condition` оператор `||` вычисляет оба операнда: вместо `x == null || x > 0` пишите `coalesce(x, 1) > 0`.
+
+Откуда берутся значения: `terraform.tfvars` (в `.gitignore`), `-var name=value`, переменная окружения `TF_VAR_name`.
+
+## Повторяющиеся блоки и ресурсы
+
+```hcl
+# dynamic: повторяющийся вложенный блок из данных
+dynamic "ingress" {
+  for_each = var.ingress_rules          # map
+  content {
+    protocol       = "TCP"
+    port           = ingress.value.port
+    v4_cidr_blocks = ingress.value.cidr_blocks
+    description    = ingress.key
+  }
+}
+
+# for_each: несколько ресурсов с ключами (вместо count с индексами)
+resource "yandex_compute_instance" "this" {
+  for_each = var.servers
+  name     = "${var.name_prefix}-${each.key}"
+}
+
+# count: только для «включить/выключить»
+resource "yandex_compute_disk" "data" {
+  count = var.data_disk_gb == null ? 0 : 1
+}
+```
+
+Outputs по карте ресурсов:
+
+```hcl
+output "external_ips" {
+  value = { for k, vm in yandex_compute_instance.this : k => vm.network_interface[0].nat_ip_address }
+}
+```
+
+## templatefile вместо heredoc
+
+```hcl
+user-data = templatefile("${path.module}/templates/cloud-init.yaml.tftpl", {
+  server_name = "${var.name_prefix}-${each.key}"
+})
+```
+
+В шаблоне подстановки пишутся как `${server_name}`; чтобы вывести `${` буквально, пишите `$${`.
+
+## moved: рефакторинг без пересоздания
+
+```hcl
+moved {
+  from = yandex_vpc_network.workshop
+  to   = module.network.yandex_vpc_network.this
+}
+```
+
+В `plan` ожидаем `has moved to` и `0 to add, 0 to destroy`. Появилось `-/+`: параметры не совпали с прежними, ищите строку `# forces replacement`.
+`data`-источники не переносятся. Старый блок `resource` удаляем из конфигурации.
+
+## lifecycle
+
+```hcl
+lifecycle {
+  prevent_destroy       = true                       # только литерал, не переменная
+  ignore_changes        = [boot_disk[0].initialize_params[0].image_id]
+  create_before_destroy = true
+}
+```
+
+Сторож от случайного `destroy` окружения: ресурс `terraform_data` с `prevent_destroy = true`. Снять перед плановой уборкой: `terraform state rm terraform_data.destroy_guard`.
+
+## Remote state в Object Storage
+
+```hcl
+terraform {
+  backend "s3" {
+    endpoints = { s3 = "https://storage.yandexcloud.net" }
+    region    = "ru-central1"
+    skip_region_validation      = true
+    skip_credentials_validation = true
+    skip_requesting_account_id  = true
+    skip_s3_checksum            = true
+    use_lockfile = true    # проверьте на своём бакете
+  }
+}
+```
+
+```bash
+export AWS_ACCESS_KEY_ID=...  AWS_SECRET_ACCESS_KEY=...       # статический ключ сервисного аккаунта
+terraform init -backend-config=backend-s3.hcl                 # bucket и key в отдельном файле (в .gitignore)
+terraform init -backend-config=backend-s3.hcl -migrate-state  # перенести локальный state в бакет
+```
+
+Backend-блок не принимает переменные. Свой `key` на каждое окружение. Ключи доступа никому не передавайте.
+
+## Проверки перед коммитом
+
+```bash
+terraform fmt -check -recursive
+terraform validate                          # в каждом окружении
+tflint --recursive                          # линтер
+gitleaks git --no-banner                    # секреты в истории git
+git ls-files | grep -E 'tfvars$|tfstate'    # должно быть пусто
+```
+
+Всё это автоматизирует `pre-commit` (конфиг `.pre-commit-config.yaml` в корне репозитория): `pip install pre-commit && pre-commit install`.
+
+## Квоты и уборка
+
+- Сети: 2 на облако по умолчанию (сеть `default` считается). Проверьте: консоль, «Квоты».
+- `yc vpc network list`, `yc compute instance list`, `yc compute disk list`: что осталось после `destroy`.
+- Документация: https://yandex.cloud/ru/docs/vpc/concepts/limits, https://yandex.cloud/ru/docs/compute/concepts/limits
 ````
 
 ---
@@ -2653,7 +2964,7 @@ terraform {
   required_providers {
     yandex = {
       source  = "yandex-cloud/yandex"
-      version = ">= 0.235.0, < 1.0.0"
+      version = ">= 0.241.0, < 1.0.0"
     }
   }
 }
@@ -2750,7 +3061,7 @@ terraform {
   required_providers {
     yandex = {
       source  = "yandex-cloud/yandex"
-      version = ">= 0.235.0, < 1.0.0"
+      version = ">= 0.241.0, < 1.0.0"
     }
   }
 }
@@ -2913,7 +3224,7 @@ terraform {
   required_providers {
     yandex = {
       source  = "yandex-cloud/yandex"
-      version = "~> 0.235"
+      version = "~> 0.241"
     }
   }
 }
@@ -3142,8 +3453,8 @@ data_disk_gb      = 10
       в документации указано, что с 12.10.2026 девять квот переходят с регионального на зонное распределение: проверьте актуальные значения для `ru-central1-a`)
       и число публичных IP (dev 1 + prod 2).
 - [ ] **Версии.** Terraform >= 1.10 (на момент подготовки актуален 1.16.x, ПРОВЕРИТЬ на releases.hashicorp.com),
-      провайдер `yandex-cloud/yandex` (актуальная 0.235.x, ПРОВЕРИТЬ на registry.terraform.io/providers/yandex-cloud/yandex,
-      провайдер выходит очень часто: обновите `~> 0.235` в `versions.tf` и закоммитьте свежий lock-файл).
+      провайдер `yandex-cloud/yandex` (актуальная 0.241.x, ПРОВЕРИТЬ на registry.terraform.io/providers/yandex-cloud/yandex,
+      провайдер выходит очень часто: обновите `~> 0.241` в `versions.tf` и закоммитьте свежий lock-файл).
 - [ ] **Зеркало провайдера.** Если registry.terraform.io недоступен: `.terraformrc` с `network_mirror` Yandex
       (https://yandex.cloud/ru/docs/terraform/quickstart).
 - [ ] **lock-файл.** После `terraform init` в каждом окружении: `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=windows_amd64`
@@ -3230,7 +3541,7 @@ terraform {
   required_providers {
     yandex = {
       source  = "yandex-cloud/yandex"
-      version = "~> 0.235"
+      version = "~> 0.241"
     }
   }
 }
