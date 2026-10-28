@@ -2,9 +2,10 @@
 
 Файл формируется из `presentation/index.html` и всегда ему соответствует. Заметки лектора лежат в самой презентации (клавиша `N`).
 
-## Слайд 1. Terraform: модули, окружения, best practices (0:00–0:01)
+## Слайд 1. Terraform: модули, окружения, (0:00–0:01)
 
 - Terraform + Yandex Cloud
+- best practices
 - Берём один работающий стенд (сеть, ВМ с nginx и диск) и доводим его от файла «на коленке» до проекта, с которым можно работать в команде и в продакшене.
 - один файл main.tf
 - модули
@@ -231,7 +232,7 @@
 - required_providers { yandex = { source = "…" } }
 - хорошо
 - required_version = ">= 1.10.0, < 2.0.0"
-- version = "~> 0.235"
+- version = "~> 0.241"
 - # lock-файл в git
 - source = "git::https://…//modules/vm
 - ?ref=v1.2.0"

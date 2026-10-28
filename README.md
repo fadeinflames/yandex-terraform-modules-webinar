@@ -17,7 +17,10 @@
 │   ├── dev/                свой state и tfvars; moved.tf переносит стенд из 00-start без пересоздания
 │   └── prod/               те же модули, другие значения; сторож от случайного destroy
 ├── presentation/           index.html (презентация, 18 слайдов) и slides.md (структура слайдов)
-├── students/               материалы студентов: ДЗ, шпаргалка по ошибкам
+├── students/               материалы студентов
+│   ├── README.md           с чего начать, подготовка окружения
+│   ├── cheatsheet.md       шпаргалка по командам и синтаксису
+│   ├── troubleshooting.md  типичные ошибки и диагностика
 │   └── homework/           README.md (задание) и hints.md (подсказки)
 ├── .pre-commit-config.yaml
 ├── .tflint.hcl
@@ -28,9 +31,16 @@
 
 ## Требования
 
-- Terraform >= 1.10 (нужен для `use_lockfile`), провайдер `yandex-cloud/yandex ~> 0.235` (ПРОВЕРИТЬ актуальную версию в реестре).
+- Terraform >= 1.10 (нужен для `use_lockfile`), провайдер `yandex-cloud/yandex ~> 0.241` (ПРОВЕРИТЬ актуальную версию в реестре).
 - Аккаунт Yandex Cloud с каталогом, `yc` CLI, SSH-ключ (`~/.ssh/id_ed25519.pub`).
 - Аутентификация без токена в коде: `export YC_TOKEN=$(yc iam create-token)` (PowerShell: `$env:YC_TOKEN = (yc iam create-token)`).
+
+## Что проверено
+
+Код прогнан на Terraform 1.16.5 с провайдером `yandex-cloud/yandex` 0.241.0 (2026-10-28):
+`terraform fmt -check`, `init` и `validate` во всех окружениях, `tflint` 0.65 (ruleset terraform), `gitleaks` 8.30.
+`00-start/` намеренно содержит ошибки (нет версий, старый синтаксис `.0`, путь к ключу в коде) и исключён из линтеров в `.pre-commit-config.yaml`.
+`terraform plan` и `apply` требуют реального облака: прогоните их на своём каталоге перед вебинаром.
 
 ## Быстрый старт (окружение dev)
 
@@ -70,7 +80,7 @@ terraform destroy                               # когда закончили
 | Всё в одном `main.tf` | Модули `network`, `vm` + окружения |
 | Три блока `ingress` | `dynamic "ingress"` по `map` правил |
 | `.terraform.lock.hcl` в `.gitignore` | Lock-файл коммитим |
-| Нет `required_version` и версии провайдера | `required_version`, `version = "~> 0.235"` |
+| Нет `required_version` и версии провайдера | `required_version`, `version = "~> 0.241"` |
 | Токен в `terraform.tfvars` (`variable "yc_token"`) | `YC_TOKEN` из окружения, переменной нет |
 | SSH с `0.0.0.0/0` | `ssh_allowed_cidrs`, в prod `0.0.0.0/0` запрещён валидацией |
 | `file("~/.ssh/id_rsa.pub")` в ресурсе | Путь — параметр окружения, в модуль уходит содержимое ключа |
